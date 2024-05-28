@@ -22,7 +22,7 @@ stream = audio.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, 
 stream.start_stream()
 
 # Inicializa a classe GoogleSearch com sua chave de API e ID do mecanismo de pesquisa
-google_search = GoogleSearch(api_key='SUA_CHAVE_DE_API', search_engine_id='SEU_ID_DO_MECANISMO_DE_PESQUISA')
+google_search = GoogleSearch(api_key='AIzaSyAwlBQKFcBgIar7F0-s8Yq-2CEmmjoSTmU', search_engine_id='124481474049d49d9')
 
 # Função para reconhecimento de comandos por voz
 def get_voice_input(prompt):
