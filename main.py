@@ -1,35 +1,32 @@
+import customtkinter as ctk
+from httpcore import stream
+from numpy import rec
+from core import SystemInfo, TaskManager, NumberMapper
+from voice import TextToSpeech
 from vosk import Model, KaldiRecognizer
 import pyaudio
-import pyttsx3
 import json
-import core
-from core import NumberMapper  # Importe a nova classe
+import threading
+from google_search import GoogleSearch  # Certifique-se de importar a classe correta
 
-# Inicialização da fala
-engine = pyttsx3.init()
-voices = engine.getProperty('voices')
-engine.setProperty('voice', voices[-2].id)
+# Inicialização dos gerenciadores
+task_manager = TaskManager()
+number_mapper = NumberMapper()
+tts = TextToSpeech()
 
-# Função para falar
-def speak(text):
-    engine.say(text)
-    engine.runAndWait()
-
-# Inicialização do reconhecimento de fala
-model = Model('model')
+# Inicialização do modelo e reconhecedor Vosk
+model = Model("model")  # Substitua "model" pelo caminho do seu modelo Vosk
 rec = KaldiRecognizer(model, 16000)
-p = pyaudio.PyAudio()
-stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=2048)
+audio = pyaudio.PyAudio()
+stream = audio.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=2048)
 stream.start_stream()
 
-# Inicialização dos gerenciadores de tarefas e calendário
-task_manager = core.TaskManager()
-calendar_manager = core.CalendarManager()
-number_mapper = NumberMapper()  # Inicialize o mapeador de números
+# Inicializa a classe GoogleSearch com sua chave de API e ID do mecanismo de pesquisa
+google_search = GoogleSearch(api_key='SUA_CHAVE_DE_API', search_engine_id='SEU_ID_DO_MECANISMO_DE_PESQUISA')
 
-# Função para obter entrada de voz e convertê-la em texto
+# Função para reconhecimento de comandos por voz
 def get_voice_input(prompt):
-    speak(prompt)
+    tts.speak(prompt)
     while True:
         data = stream.read(2048)
         if rec.AcceptWaveform(data):
@@ -39,65 +36,100 @@ def get_voice_input(prompt):
                 text = result['text']
                 return text
 
-# Loop do reconhecimento de fala
-while True:
-    data = stream.read(2048)
-    if len(data) == 0:
-        break
-    if rec.AcceptWaveform(data):
-        result = rec.Result()
-        result = json.loads(result)
+def reconhecer_comandos_por_voz(audio):
+    def reconhecimento_thread():
+        while True:
+            data = stream.read(2048)
+            if len(data) == 0:
+                break
+            if rec.AcceptWaveform(data):
+                result = rec.Result()
+                result = json.loads(result)
 
-        if result is not None:
-            text = result['text']
-            print(text)
+                if result is not None:  # Verifica se result não é None e se 'text' está presente
+                    text = result['text']
+                    print("Comando reconhecido:", text)
 
-            if text == 'assistente que horas são' or text == 'assistente me diga as horas' or text == 'assistente horas':
-                speak(core.SystemInfo.get_time())
-            elif text == 'assistente que dia é hoje' or text == 'assistente me diga o dia':
-                speak(core.SystemInfo.get_date())
-            elif text == 'assistente abra o google' or text == 'assistente google':
-                speak('abrindo o google')
-                core.SystemInfo.open_google()
-            elif text == 'assistente abra o youtube':
-                core.SystemInfo.open_youtube()
-                speak('abrindo o youtube')
-            elif text == 'assistente abra o ataque' or text == 'assistente abra ato' or text == 'assistente ataque':
-                core.SystemInfo.open_whatsapp()
-                speak('abrindo o whatsapp')
-            elif text == 'assistente abra o facebook':
-                core.SystemInfo.open_facebook()
-                speak('abrindo o facebook')
-            elif text == 'assistente abra o instagram':
-                core.SystemInfo.open_instagram()
-                speak('abrindo o instagram')
-            elif text == 'assistente adicione uma tarefa' or text == 'assistente crie uma tarefa':
-                speak('Escolha uma das seguintes opções de tarefa: 1. Comprar leite 2. Ligar para cliente 3. Enviar email')
-                task_choice = get_voice_input('Por favor, diga o número da opção:')
-                task_choice = number_mapper.map_number(task_choice)
-                if task_choice == 1:
-                    task_manager.add_task('Comprar leite')
-                elif task_choice == 2:
-                    task_manager.add_task('Ligar para cliente')
-                elif task_choice == 3:
-                    task_manager.add_task('Enviar email')
-                speak('Tarefa adicionada com sucesso.')
-            elif text == 'assistente liste minhas tarefas' or text == 'assistente mostre minhas tarefas':
-                tasks = task_manager.get_tasks()
-                if len(tasks) > 0:
-                    speak('Aqui estão suas tarefas:')
-                    for index, task in enumerate(tasks):
-                        speak(f'Tarefa {index + 1}: {task}')
-                else:
-                    speak('Você não tem tarefas pendentes.')
-            elif text == 'assistente crie um evento no calendário':
-                summary = get_voice_input('Qual é o resumo do evento?')
-                start_date = get_voice_input('Qual é a data de início do evento? (Formato: YYYY-MM-DD)')
-                start_time = get_voice_input('Qual é a hora de início do evento? (Formato: HH:MM)')
-                end_date = get_voice_input('Qual é a data de término do evento? (Formato: YYYY-MM-DD)')
-                end_time = get_voice_input('Qual é a hora de término do evento? (Formato: HH:MM)')
+                    if text == 'horas' or text == 'hora':
+                        obter_horas()
+                    elif text == 'data' or text == 'dia':
+                        obter_data()
+                    elif text == 'google' or text == 'abrir google':
+                        tts.speak("abrindo google...")
+                        abrir_google()
+                    else:
+                        resposta = google_search.responder_pergunta(text)  # Uso correto da instância google_search
+                        tts.speak(resposta)
+                        resultado.set(resposta)
 
-                start_datetime = f'{start_date}T{start_time}:00'
-                end_datetime = f'{end_date}T{end_time}:00'
-                calendar_manager.create_event(summary, start_datetime, end_datetime)
-                speak('Evento criado com sucesso no seu calendário.')
+        # Certifique-se de fechar o fluxo manualmente após a conclusão
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
+
+    # Inicia o thread para execução do reconhecimento de comandos por voz
+    threading.Thread(target=reconhecimento_thread).start()
+
+# Funções de Interface
+def obter_horas():
+    resposta = SystemInfo.get_time()
+    tts.speak(resposta)
+
+def obter_data():
+    resposta = SystemInfo.get_date()
+    tts.speak(resposta)
+
+def abrir_google():
+    resposta = SystemInfo.open_google()
+    tts.speak(resposta)
+
+# Adicionar histórico de comandos
+historico_comandos = []
+
+
+# Configuração da Interface Gráfica
+ctk.set_appearance_mode("dark")  # Modo escuro
+ctk.set_default_color_theme("blue")  # Tema azul
+
+app = ctk.CTk()
+app.geometry("600x400")
+app.title("Assistente Virtual")
+
+frame = ctk.CTkFrame(app)
+frame.pack(pady=20, padx=20, fill="both", expand=True)
+
+titulo = ctk.CTkLabel(frame, text="Assistente Virtual", font=("Arial", 24))
+titulo.pack(pady=12, padx=10)
+
+resultado = ctk.StringVar()
+
+# Widgets da Interface
+btn_horas = ctk.CTkButton(frame, text="Obter Horas", command=obter_horas)
+btn_horas.pack(pady=10)
+
+btn_data = ctk.CTkButton(frame, text="Obter Data", command=obter_data)
+btn_data.pack(pady=10)
+
+btn_google = ctk.CTkButton(frame, text="Abrir Google", command=abrir_google)
+btn_google.pack(pady=10)
+
+# Inicializa o PyAudio fora da função de reconhecimento
+audio = pyaudio.PyAudio()
+
+# Chama a função de reconhecimento passando a instância do PyAudio como argumento
+btn_reconhecer_voz = ctk.CTkButton(frame, text="Reconhecer Comandos por Voz", command=lambda: reconhecer_comandos_por_voz(audio))
+btn_reconhecer_voz.pack(pady=10)
+
+# Botão para perguntas gerais
+btn_perguntas_gerais = ctk.CTkButton(frame, text="Perguntar", command=lambda: google_search.responder_pergunta("Qual é a capital da França?"))
+btn_perguntas_gerais.pack(pady=10)
+
+# Label para mostrar o resultado
+label_resultado = ctk.CTkLabel(frame, textvariable=resultado, font=("Arial", 18))
+label_resultado.pack(pady=20)
+
+# Label para mostrar o histórico de comandos
+label_historico = ctk.CTkLabel(frame, text="", font=("Arial", 12), justify="left")
+label_historico.pack(pady=10)
+
+app.mainloop()
